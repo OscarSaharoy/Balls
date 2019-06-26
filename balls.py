@@ -1,15 +1,14 @@
-import pygame, random, math, numpy, sys, tkinter, gooey
+# Oscar Saharoy 2019
+
+import pygame, random, numpy, sys, tkinter, gooey
 from tkinter.font import Font
 
 
 pygame.init()
 
-info = pygame.display.Info()
+info  = pygame.display.Info()
 
 SP    = info.current_h // 50  # measurement unit
-
-x_res = SP * 25   # Width of display
-y_res = SP * 25   # Height of display
 
 # Palette
 
@@ -19,12 +18,13 @@ leaf  = ( 30, 255,  30)
 jade  = (100, 150, 100)
 blue  = ( 34, 238, 255)
 gray  = ( 40,  60,  70)
+lgray = (200, 200, 200)
 
 class Balls(object):
 
     def __init__(self):
 
-        data       = Data()
+        data       = Data() # data storage object for communication between pygame and tkinter windows
 
         data.n     = 70     # number of balls
         data.rest  = 1      # restitution of system
@@ -34,40 +34,38 @@ class Balls(object):
         data.d     = 2*r    # diameter of balls
         data.fps   = 60     # framerate
         data.f_len = 100    # length of fade for ball impact colour
+        data.x_res = SP*25  # Width of display
+        data.y_res = SP*25  # Height of display
+        data.max_n = 200    # maximum number of balls
  
-        data.pos   = numpy.random.rand(data.n,2) * numpy.array([[x_res-data.d, y_res-data.d]]) + data.d # position of balls - randomised at start
-        data.vel   = numpy.random.rand(data.n,2) * data.v0 - data.v0/2 # velocity of balls
-        data.mass  = numpy.ones(200) # masses of balls
-        data.val   = numpy.zeros(200) # stores colour value data - colours brightest after collision and then fade
+        data.pos   = numpy.random.rand(data.max_n,2) * numpy.array([[data.x_res-data.d, data.y_res-data.d]]) + data.r # position of balls - randomised at start
+        data.vel   = numpy.random.rand(data.max_n,2) * data.v0 - data.v0/2 # velocity of balls
+        data.mass  = numpy.ones(data.max_n) # masses of balls
+        data.val   = numpy.zeros(data.max_n) # stores colour value data - colours brightest after collision and then fades
 
         data.hex   = '#22eeff' # hex of base colour - cyan default
-        data.rhue  = numpy.random.rand(200,3) # random colours with different hues
-        data.rgrey = numpy.random.rand(200,1).repeat(3,axis=1) # random grays
+        data.rhue  = numpy.random.rand(data.max_n,3) # random colours with different hues
+        data.rgrey = numpy.random.rand(data.max_n,1).repeat(3,axis=1) # random grays
         data.hue_v = 0.5 # amount of hue variation
         data.val_v = 1.0 # amount of value variation
         data.fade  = True # controls whether balls get colour on impact and then fade or have constant colour
 
-        data.closed = False # True if settings panel is closed
+        data.closed= False # True if settings panel is closed
 
-        data.last_outside = numpy.zeros([data.n,2]) == 1 # stores balls which were outside screen last timestep - starts all False
+        data.last_outside = numpy.zeros([data.max_n,2]) == 1 # stores balls which were outside screen last timestep - starts all False
 
         self.data  = data
 
         # initialise window for drawing
-        self.surface = pygame.display.set_mode((x_res,y_res))
+        self.surface = pygame.display.set_mode((data.x_res, data.y_res), pygame.RESIZABLE)
         pygame.display.set_caption(' Balls')
 
         # setting favicon
         icon = pygame.image.load(r'assets/favicon.png')
         pygame.display.set_icon(icon)
 
-        # initialising tkinter setitngs panel
+        # initialising tkinter settings panel
         self.panel = Panel(self, self.data)
-
-        # binding certain events in the settings panel to get the values of the vairables in it 
-        self.panel.bind('<B1-Motion>',       self.panel.get_vars)
-        self.panel.bind('<ButtonRelease-1>', self.panel.get_vars)
-        self.panel.bind('<Return>',          self.panel.get_vars)
 
         # call main loop
         self.mainloop()
@@ -89,7 +87,7 @@ class Balls(object):
         data.tone   = (data.val_v*hue + (1-data.val_v)) * numpy.array([base_colour]) # randomise colours
 
         # draw blue filling and black outline for each ball at its coords
-        for i,point in enumerate(data.pos):
+        for i, point in enumerate(data.pos[:data.n]):
 
             # calculate effect of colour fade on colour of ball
             tone = data.tone[i]*data.val[i] if data.fade else data.tone[i]
@@ -103,18 +101,11 @@ class Balls(object):
         data = self.data
 
         # gravity array is data.g in each of the y components for each ball
-        grav      = numpy.ones([data.n,2]) * numpy.array([[0, 1]]) * data.g
+        grav = numpy.ones([data.max_n,2]) * numpy.array([[0, data.g]])
+        grav[data.n:] *= 0
 
         # add the velocity from gravity to the current velocity
         data.vel += grav
-
-
-    def restrict(self, pos, res):
-
-        data = self.data
-
-        # limits pos to between data.r and res-data.r - makes sure ball is completely inside rendered area
-        return float(sorted([ data.r, pos, res-data.r ])[1])
 
 
     def bounce(self):
@@ -122,8 +113,8 @@ class Balls(object):
         data = self.data
 
         # finds which balls are outside the screen and puts true in these slots
-        outside_greater = data.pos >= numpy.array([[ x_res-data.r, y_res-data.r ]])
-        outside_lesser  = data.pos <= numpy.array([[       data.r,       data.r ]])
+        outside_greater = data.pos > numpy.array([[ data.x_res-data.r, data.y_res-data.r ]])
+        outside_lesser  = data.pos < numpy.array([[            data.r,            data.r ]])
 
         # OR together last 2 arrays to get all balls outside screen in 1 array
         outside   = outside_greater | outside_lesser
@@ -134,37 +125,37 @@ class Balls(object):
         # store which balls are currently outside to compare to next timestep
         data.last_outside = outside
 
-        # convert boolean values to 1 for balls which are inside and -1 for outside, adjusted byt the restitution
+        # convert boolean values to 1 for balls which are inside and -1 for outside, adjusted by the restitution
         to_bounce = outside * (-1-data.rest) + 1
 
         # multiply velocities by to_bounce to flip those which need to be
         data.vel *= to_bounce
 
-        # vectorise self.restrict so it can be applied to an array
-        restrict  = numpy.vectorize(self.restrict)
-
         # make sure all balls are inside screen
-        data.pos  = restrict(data.pos, x_res)
+        data.pos[:,0] = numpy.clip(data.pos[:,0], data.r, data.x_res-data.r)
+        data.pos[:,1] = numpy.clip(data.pos[:,1], data.r, data.y_res-data.r)
 
 
     def collide(self):
 
         data = self.data
 
+        eligable   = data.pos[:data.n]
+
         # collisions keeps track of which collisions have already been computed
         collisions = [[] for _ in range(data.n)]
 
-        for i1, ball_pos in enumerate(data.pos):
+        for i1, ball_pos in enumerate(eligable):
 
             # calculate distance from current ball to all other balls
-            pos_translate = (data.pos - ball_pos)**2
+            pos_translate = (eligable - ball_pos)**2
             dist  = numpy.sum(pos_translate, axis=1)**0.5
 
             # they collide if the distance is less than 2 times the radius but not 0 - corresponds to current ball
-            hit   = (dist <= data.r*2) & (dist != 0.0)
+            hits  = (dist <= data.r*2) & (dist != 0.0)
 
             # get indexes of balls which are colliding with current
-            index = numpy.nonzero(hit)[0]
+            index = numpy.nonzero(hits)[0]
 
             for i2 in index:
 
@@ -202,51 +193,41 @@ class Balls(object):
         m1, m2 = data.mass[i1], data.mass[i2]
 
         # e is the restitution of the system and de is the postion delta of the 2 balls
-        e      = -data.rest
+        e      = data.rest
         de     = x2 - x1
 
         # translate velocities to frame of reference of ball 2 and find angle of line of centres
         v1r    = v1 - v2
         th     = numpy.arctan2(de[1], de[0])
 
-        # set value for intensity of colour dependant on impact speed
-        # v1rm   = (v1r[0]**2 + v1r[1]**2) ** 0.5
-        # val    = min(v1rm/3, 1.0)
-        # self.val[i1] = self.val[i2] = val
-
         # make rotation matrices for + and - line of centres and then rotate relative velocity of balls
         rot    = self.rotation_matrix(-th)
         m_rot  = self.rotation_matrix(th)
         v1rr   = numpy.matmul(rot, v1r)
 
-        # get relative rotated vx and vy of ball 1
-        vx, vy = v1rr[0,0], v1rr[0,1]
-
-        # ~~~ todo replace with matrix multiplication ~~~
-
         # calculate new rotated relative velocities by conservation of momentum and restitution
-        v1rrn  = [ vx * (m1+e*m1)/(m1+m2) , vy ]
-        v2rrn  = [ vx * (m1-e*m2)/(m1+m2) ,  0 ]
+        v1rrr  = numpy.repeat(v1rr, 2, axis=0)
+        coeffs = numpy.array([[ (m1-e*m1)/(m1+m2), 1 ],
+                              [ (m1+e*m2)/(m1+m2), 0 ]])
+        vrrn   = coeffs * numpy.array(v1rrr)
 
         # rotate velocities back to normal coordinate system
-        v1rn   = numpy.matmul(m_rot, v1rrn)
-        v2rn   = numpy.matmul(m_rot, v2rrn)
+        vrn    = numpy.matmul(m_rot, vrrn.T)
 
-        # translate velocities to aboslute velocity
-        v1n    = v1rn + v2
-        v2n    = v2rn + v2
+        # translate velocities to absolute velocity
+        vn     = vrn.T + v2
 
-        # overwite current velocities with computed velocities
-        data.vel[i1]  = numpy.array(v1n)[0]
-        data.vel[i2]  = numpy.array(v2n)[0]
+        # overwrite velocities with new values
+        data.vel[i1]  = vn[0]
+        data.vel[i2]  = vn[1]
 
         # ~~~ todo improve next part ~~~
 
         # calculate distance between balls - need to move balls apart so they are no longer colliding
         mde    = (de[0]**2 + de[1]**2)**0.5
 
-        # find fraction of 2*radius to move - divided by 4 as each ball moves 1 quarter of this distance
-        fr     = (data.r*2 - mde) / data.r*2 / 4
+        # find fraction of radius to move - divided by 2 as each ball moves half of this distance
+        fr     = (data.r*2 - mde) / data.r / 2
 
         # calculate move in x and y
         m      = [fr * de[0], fr * de[1]]
@@ -260,51 +241,15 @@ class Balls(object):
 
         data = self.data
 
-        # reduce self.val in an exponential decay making ball colour fade over time
+        # only executes if data.fade is True
 
-        decay_const = 1-1/data.f_len
-   
-        data.val    = data.val*decay_const + 0.2*(1-decay_const)
+        if data.fade:
 
-
-    def energy(self):
-
-        data = self.data
-
-        # sums kinetic energy of balls and prints it
-
-        energy = sum([0.5*(vx**2 + vy**2)*0.5 for (vx,vy) in data.vel])
-
-        print(energy)
-
-
-    def n_balls(self):
-
-        data = self.data
-
-        # difference in number of balls
-        diff = data.n - data.pos.shape[0]
-
-        # truncates relevant arrays if decreasing number of balls
-        if diff < 0:
-
-            data.pos  = data.pos[ :data.n]
-            data.vel  = data.vel[ :data.n]
-
-            data.last_outside = data.last_outside[:data.n]
-
-        # creates new random values and appends them onto existing arrays if increasing number of balls
-        elif diff > 0:
-
-            newpos    = numpy.random.rand(diff,2) * numpy.array([[x_res-data.d, y_res-data.d]]) + data.d
-            newvel    = numpy.random.rand(diff,2) * data.v0 - data.v0/2
-
-            newlast_outside   = numpy.zeros([diff,2]) == 1
-
-            data.pos  = numpy.append(data.pos,  newpos,  axis=0)
-            data.vel  = numpy.append(data.vel,  newvel,  axis=0)
-
-            data.last_outside = numpy.append(data.last_outside, newlast_outside, axis=0)
+            # reduce self.val in an exponential decay making ball colour fade over time
+    
+            decay_const = 1-1/data.f_len
+    
+            data.val    = data.val*decay_const + 0.2*(1-decay_const)
 
 
     def mainloop(self):
@@ -322,22 +267,20 @@ class Balls(object):
                 if event.type == pygame.QUIT:
                     sys.exit()
 
-            # if the number of balls has changed then call self.n_balls to change the number of balls rendered
-            if self.data.n != len(self.data.pos):
+                if event.type == pygame.VIDEORESIZE:
+                    self.data.x_res = event.w
+                    self.data.y_res = event.h
+                    self.surface    = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
 
-                self.n_balls()
     
             # render scene
-
             self.draw()
             self.gravity()
             self.bounce()
             self.collide()
             self.evolve_fade()
 
-            #self.energy()
-
-            # update screen 
+            # update screen
             pygame.display.flip()
 
             # update panel
@@ -376,7 +319,7 @@ class Panel(gooey.Tk):
         # Creating fonts
 
         arial_big   = Font(family="Arial",   size=int(SP*1.2),  weight='bold')
-        arial_med   = Font(family="Arial",   size=int(SP*1),   weight='bold')
+        arial_med   = Font(family="Arial",   size=int(SP*1),    weight='bold')
 
         verdana_big = Font(family="Verdana", size=int(SP))
         verdana_med = Font(family="Verdana", size=int(SP//1.5), weight='bold')
@@ -402,7 +345,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=2, column=2)
 
-        self.grav_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=-0.1, to=0.1)
+        self.grav_scale = gooey.Scale(s_frame, height=SP*1.5, length=SP*12, width=SP*100, from_=-0.1, to=0.1)
         self.grav_scale.grid(row=2, column=3)
         self.grav_scale.set(0.005)
 
@@ -419,7 +362,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=4, column=2)
 
-        self.rest_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=0, to=1)
+        self.rest_scale = gooey.Scale(s_frame, height=SP*1.5, length=SP*12, width=SP*100, from_=0, to=1)
         self.rest_scale.grid(row=4, column=3)
         self.rest_scale.set(1)
 
@@ -437,7 +380,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=6, column=2)
 
-        self.radius_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=2, to=SP*3, value_type='int')
+        self.radius_scale = gooey.Scale(s_frame, height=SP*1.5, length=SP*12, width=SP*100, from_=2, to=SP*3, value_type='int')
         self.radius_scale.grid(row=6, column=3)
         self.radius_scale.set(SP//2)
 
@@ -455,7 +398,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=8, column=2)
 
-        self.number_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=1, to=200, value_type='int')
+        self.number_scale = gooey.Scale(s_frame, height=SP*1.5, length=SP*12, width=SP*100, from_=1, to=data.max_n, value_type='int')
         self.number_scale.grid(row=8, column=3)
         self.number_scale.set(70)
 
@@ -498,7 +441,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=14, column=2)
 
-        self.val_v_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=0, to=1)
+        self.val_v_scale = gooey.Scale(s_frame, height=SP*1.25, length=SP*12, width=SP*100, from_=0, to=1)
         self.val_v_scale.grid(row=14, column=3)
         self.val_v_scale.set(1.0)
 
@@ -516,7 +459,7 @@ class Panel(gooey.Tk):
 
         gooey.Spacer(s_frame,width=SP).grid(row=16, column=2)
 
-        self.hue_v_scale = gooey.Scale(s_frame, height=SP, length=SP*12, width=SP*100, from_=0, to=1)
+        self.hue_v_scale = gooey.Scale(s_frame, height=SP*1.25, length=SP*12, width=SP*100, from_=0, to=1)
         self.hue_v_scale.grid(row=16, column=3)
         self.hue_v_scale.set(0.5)
 
@@ -526,6 +469,11 @@ class Panel(gooey.Tk):
         self.hue_v_label.grid(row=16, column=5)
 
         gooey.Spacer(s_frame,height=SP).grid(row=17)
+
+        # binding certain events in the settings panel to get the values of the variables in it 
+        self.bind('<B1-Motion>',       self.get_vars)
+        self.bind('<ButtonRelease-1>', self.get_vars)
+        self.bind('<Return>',          self.get_vars)
 
 
     def close(self):
@@ -568,6 +516,3 @@ class Panel(gooey.Tk):
         self.fade_button['text'] = 'On' if data.fade else 'Off'
 
 Balls()
-
-#ff33ee
-#ffffff
