@@ -1,6 +1,6 @@
 # Oscar Saharoy 2019
 
-import pygame, random, numpy, sys, tkinter, gooey
+import pygame, random, numpy, sys, tkinter, gooey, os
 from tkinter.font import Font
 
 
