@@ -60,8 +60,12 @@ class Balls(object):
         self.surface = pygame.display.set_mode((data.x_res, data.y_res), pygame.RESIZABLE)
         pygame.display.set_caption(' Balls')
 
+        # Set current directory
+        dirname   = os.path.dirname(__file__)
+        icon_path = os.path.join(dirname, r'assets/favicon.png')
+
         # setting favicon
-        icon = pygame.image.load(r'assets/favicon.png')
+        icon = pygame.image.load(icon_path)
         pygame.display.set_icon(icon)
 
         # initialising tkinter settings panel
@@ -308,7 +312,10 @@ class Panel(gooey.Tk):
 
         self.wm_title(' Balls') # set title
 
-        icon = tkinter.PhotoImage(file=r'assets/favicon.gif') # setting favicon
+        dirname   = os.path.dirname(__file__) # set current directory
+        icon_path = os.path.join(dirname, r'assets/favicon.gif')
+
+        icon = tkinter.PhotoImage(file=icon_path) # setting favicon
         self.tk.call('wm', 'iconphoto', self._w, icon)  
 
         self.closed = False
